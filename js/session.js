@@ -36,11 +36,24 @@ export class Session {
     this.proposal = null; // a close call the user can accept with Fix: { moves, alternatives, sample }
   }
 
-  /** Take in one detection; `sample` is the board picture it was made from. */
+  /** Take in one detection; `sample` is the board picture it was made from.
+   *
+   * A close call on offer survives "pending" frames: tapping the phone shakes the picture for a
+   * moment, and the offer must still be there when the tap lands. */
   onDetection(det, sample) {
     this.kind = det.kind;
-    this.proposal = det.kind === 'unsure' && det.moves.length ? { moves: det.moves, alternatives: det.alternatives, sample } : null;
+    if (det.kind === 'unsure' && det.moves.length) {
+      this.proposal = { moves: det.moves, alternatives: det.alternatives, sample };
+    } else if (det.kind !== 'pending') {
+      this.proposal = null;
+    }
     if (det.kind === 'confirmed') this.accept(det.moves, det.alternatives, sample);
+  }
+
+  /** Checkmate, stalemate or bare kings. Repetitions and the 50-move rule are claims, not automatic. */
+  gameOver() {
+    const board = this.board;
+    return board.isCheckmate() || board.isStalemate() || board.isInsufficientMaterial();
   }
 
   accept(moves, alternatives, sample) {
@@ -94,34 +107,30 @@ export class Session {
   }
 
   needsEngine() {
-    return this.board.turn() === this.userColor && !this.best && !this.board.isGameOver();
+    return this.board.turn() === this.userColor && !this.best && !this.gameOver();
   }
 
   setBest(move) {
     this.best = move;
   }
 
-  lastMoveSquares() {
-    const moves = this.board.history({ verbose: true });
-    const last = moves[moves.length - 1];
-    return `${last.from} → ${last.to}`;
-  }
-
   status() {
     const board = this.board;
-    if (board.isGameOver()) {
+    if (this.gameOver()) {
       return `Game over: ${board.isCheckmate() ? 'checkmate' : board.isStalemate() ? 'stalemate' : 'draw'}`;
     }
     if (this.kind === 'board_moved') return BOARD_MOVED;
     if (this.proposal) return `${READING} tap Fix for ${this.proposal.moves.map(moveText).join(', ')}`;
     if (this.kind === 'pending') return READING;
-    const moved = board.history().length > 0;
+    const moves = board.history({ verbose: true });
+    const last = moves[moves.length - 1];
+    const lastSquares = last && `${last.from} → ${last.to}`;
     if (board.turn() === this.userColor) {
       // It is the user's turn, so the last move on the board (if any) was the opponent's.
-      const after = moved ? ` (after ${this.lastMoveSquares()})` : '';
+      const after = last ? ` (after ${lastSquares})` : '';
       if (!this.best) return this.hasEngine ? `Your move: thinking…${after}` : `Your move${after}`;
       return `Your move: ${moveText(this.best)}${after}`;
     }
-    return moved ? `Opponent's turn — last move ${this.lastMoveSquares()}` : "Opponent's turn";
+    return last ? `Opponent's turn — last move ${lastSquares}` : "Opponent's turn";
   }
 }

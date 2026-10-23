@@ -32,23 +32,28 @@
     display: grid; grid-template-rows: auto 1fr auto;
   }
 
+  /* The banner keeps one height (room for 3 lines) so the picture never jumps while you tap. */
   #banner {
+    grid-row: 1;
+    height: calc(env(safe-area-inset-top, 0px) + 96px);
     padding: calc(env(safe-area-inset-top, 0px) + 10px) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));
     background: var(--panel);
     border-bottom: 1px solid var(--line);
-    min-height: 3.6em;
     display: flex; align-items: center;
+    overflow: hidden;
   }
   #status {
     margin: 0;
-    font-size: clamp(17px, 4.6vw, 22px);
+    font-size: clamp(16px, 4.4vw, 20px);
     font-weight: 650;
     line-height: 1.25;
     text-wrap: balance;
     font-variant-numeric: tabular-nums;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
   }
 
-  #stage { position: relative; overflow: hidden; background: #000; min-height: 0; }
+  #stage { grid-row: 2; position: relative; overflow: hidden; background: #000; min-height: 0; }
+  footer { grid-row: 3; }
   #stage video, #stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   #stage video, #demo { object-fit: contain; }
   #overlay { touch-action: none; }
@@ -70,6 +75,7 @@
     color: var(--text);
     font: 600 16px/1 var(--ui);
     cursor: pointer;
+    touch-action: manipulation;
   }
   button:active { background: #26302a; }
   button:disabled { opacity: 0.4; cursor: default; }
@@ -117,6 +123,9 @@
       <button id="play-white" type="button" class="primary">I play White</button>
       <button id="play-black" type="button">I play Black</button>
     </div>
+    <div class="bar" id="camera-bar" hidden>
+      <button id="restart-camera" type="button" class="primary">Restart camera</button>
+    </div>
     <div class="bar" id="play-bar" hidden>
       <button id="undo" type="button">Undo</button>
       <button id="fix" type="button">Fix move</button>
@@ -133,16 +142,26 @@
     <p class="lede">Films your board with the back camera and draws Stockfish’s best move on the live picture.</p>
     <ol>
       <li>Set up the starting position. Put the phone on a stand on your side of the board, looking down at it.</li>
-      <li>Tap the 4 corners of the board, starting under White’s left rook.</li>
+      <li>Tap the 4 corners of the board, starting under White’s left rook. Slide your finger onto each corner before you lift it.</li>
       <li>Pick your colour and play. If a move is read wrong, tap <b>Fix move</b>; if the phone moved, tap <b>Redo corners</b>.</li>
     </ol>
     <button id="start" type="button" class="primary">Start camera</button>
     <p id="intro-error" role="alert" hidden></p>
+    <p class="small">Needs iOS 16.4 or newer. If the screen dims during a game, set Settings → Display &amp; Brightness → Auto-Lock to Never.</p>
     <p class="small">Use it for practice, analysis or with people who know. Against an opponent who doesn’t know, it’s cheating.</p>
     <p class="small"><a href="?demo">Try it on a demo board</a> (no camera needed)</p>
   </div>
 </section>
 
 <script type="module" src="js/app.js"></script>
+<script>
+  // If the app's code didn't load (a half-updated cache, an old browser), say so instead of a dead button.
+  setTimeout(function () {
+    if (window.chessHelperLoaded) return;
+    var error = document.getElementById('intro-error');
+    error.textContent = 'The page didn’t finish loading. Reload it; if that doesn’t help, update iOS or try another browser.';
+    error.hidden = false;
+  }, 6000);
+</script>
 </body>
 </html>

@@ -102,6 +102,30 @@ test('Fix accepts an unsure reading', () => {
   assert.deepEqual(session.board.history(), ['e4']);
 });
 
+test('an offered close call survives a shaky frame', () => {
+  const session = new Session('b', 'ref');
+  session.onDetection(detection('unsure', [move('e2e3')], [[move('e2e4')]]), 'flat');
+  session.onDetection(detection('pending'), 'shaky');
+  assert.ok(session.canFix());
+  session.fix();
+  assert.deepEqual(session.board.history(), ['e3']);
+  assert.equal(session.reference, 'flat');
+});
+
+test('an offer is dropped when the board settles back or a move is confirmed', () => {
+  const session = new Session('b', 'ref');
+  session.onDetection(detection('unsure', [move('e2e3')]), 'flat');
+  session.onDetection(detection('none'), 'same');
+  assert.ok(!session.canFix());
+});
+
+test('a repetition is not game over', () => {
+  const session = new Session('w', 'ref');
+  for (const uci of ['g1f3', 'g8f6', 'f3g1', 'f6g8', 'g1f3', 'g8f6', 'f3g1', 'f6g8']) session.board.move(uci);
+  assert.ok(session.needsEngine());
+  assert.ok(!session.status().startsWith('Game over'));
+});
+
 test('without an engine it says only whose move it is', () => {
   const session = new Session('w', 'ref');
   session.hasEngine = false;
