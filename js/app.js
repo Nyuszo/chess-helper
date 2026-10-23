@@ -35,6 +35,19 @@ const els = {
   cameraBar: $('camera-bar'), restartCamera: $('restart-camera'),
 };
 
+// Right after an update, the browser can hold an old copy of the page next to this newer script.
+// Then some buttons are missing: say so instead of half-working.
+const missing = Object.keys(els).filter((key) => !els[key]);
+if (missing.length) {
+  const note = document.getElementById('intro-error');
+  if (note) {
+    note.textContent = 'This page was just updated. Reload it to get the new version (wait a minute if it happens again).';
+    note.hidden = false;
+  }
+  window.chessHelperLoaded = true; // the message above replaces the generic "didn't load" one
+  throw new Error(`page and script versions differ; missing: ${missing.join(', ')}`);
+}
+
 const demoMode = new URLSearchParams(location.search).has('demo');
 const proc = document.createElement('canvas');
 const procCtx = proc.getContext('2d', { willReadFrequently: true });
