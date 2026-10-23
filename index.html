@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f0d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Chess Helper</title>
+<style>
+  /* Layout: a camera app. Status bar on top, the live board in the middle, thumb-sized controls at the bottom. */
+  :root {
+    color-scheme: dark;
+    --bg: #0b0f0d;          /* near-black with a felt-green bias */
+    --panel: #141a16;
+    --text: #edf2ea;
+    --muted: #97a39a;
+    --line: rgba(237, 242, 234, 0.14);
+    --move: #45e07c;        /* the best-move green drawn on the board */
+    --move-ink: #062611;
+    --alert: #ff8a7a;
+    --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 16px/1.4 var(--ui); -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+
+  #app {
+    position: fixed; inset: 0;
+    display: grid; grid-template-rows: auto 1fr auto;
+  }
+
+  #banner {
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    min-height: 3.6em;
+    display: flex; align-items: center;
+  }
+  #status {
+    margin: 0;
+    font-size: clamp(17px, 4.6vw, 22px);
+    font-weight: 650;
+    line-height: 1.25;
+    text-wrap: balance;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #stage { position: relative; overflow: hidden; background: #000; min-height: 0; }
+  #stage video, #stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #stage video, #demo { object-fit: contain; }
+  #overlay { touch-action: none; }
+
+  .bar {
+    display: flex; gap: 10px;
+    padding: 12px max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 12px) max(16px, env(safe-area-inset-left, 0px));
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+  }
+  .bar button { flex: 1 1 0; min-width: 0; }
+
+  button {
+    min-height: 50px;
+    padding: 0 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #1d251f;
+    color: var(--text);
+    font: 600 16px/1 var(--ui);
+    cursor: pointer;
+  }
+  button:active { background: #26302a; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button:focus-visible { outline: 3px solid var(--move); outline-offset: 2px; }
+  button.primary { background: var(--move); color: var(--move-ink); border-color: transparent; }
+  button.primary:active { filter: brightness(0.92); }
+
+  #intro {
+    position: fixed; inset: 0; z-index: 5;
+    overflow-y: auto;
+    background: var(--bg);
+    padding: calc(env(safe-area-inset-top, 0px) + 28px) max(20px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 28px) max(20px, env(safe-area-inset-left, 0px));
+  }
+  #intro .inner { max-width: 30rem; margin: 0 auto; display: grid; gap: 18px; }
+  #intro h1 { margin: 0; font-size: 34px; letter-spacing: -0.01em; text-wrap: balance; }
+  #intro .board-mark { display: grid; grid-template-columns: repeat(4, 14px); width: max-content; }
+  #intro .board-mark span { width: 14px; height: 14px; background: var(--panel); }
+  #intro .board-mark span:nth-child(odd) { background: var(--move); }
+  #intro .board-mark span:nth-child(n+5):nth-child(-n+8):nth-child(odd) { background: var(--panel); }
+  #intro .board-mark span:nth-child(n+5):nth-child(-n+8):nth-child(even) { background: var(--move); }
+  .lede { margin: 0; color: var(--muted); font-size: 17px; }
+  ol { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; }
+  ol li::marker { color: var(--move); font-family: var(--mono); }
+  #start { width: 100%; }
+  #intro-error { margin: 0; color: var(--alert); }
+  .small { margin: 0; color: var(--muted); font-size: 14px; }
+  #intro a { color: var(--move); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="banner" hidden><p id="status" aria-live="polite"></p></header>
+
+  <main id="stage">
+    <video id="video" playsinline muted autoplay></video>
+    <canvas id="demo" hidden></canvas>
+    <canvas id="overlay"></canvas>
+  </main>
+
+  <footer>
+    <div class="bar" id="corner-bar" hidden>
+      <button id="clear-corners" type="button">Start over</button>
+    </div>
+    <div class="bar" id="colour-bar" hidden>
+      <button id="play-white" type="button" class="primary">I play White</button>
+      <button id="play-black" type="button">I play Black</button>
+    </div>
+    <div class="bar" id="play-bar" hidden>
+      <button id="undo" type="button">Undo</button>
+      <button id="fix" type="button">Fix move</button>
+      <button id="redo" type="button">Redo corners</button>
+      <button id="demo-next" type="button" hidden>Demo move</button>
+    </div>
+  </footer>
+</div>
+
+<section id="intro">
+  <div class="inner">
+    <div class="board-mark" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    <h1>Chess Helper</h1>
+    <p class="lede">Films your board with the back camera and draws Stockfish’s best move on the live picture.</p>
+    <ol>
+      <li>Set up the starting position. Put the phone on a stand on your side of the board, looking down at it.</li>
+      <li>Tap the 4 corners of the board, starting under White’s left rook.</li>
+      <li>Pick your colour and play. If a move is read wrong, tap <b>Fix move</b>; if the phone moved, tap <b>Redo corners</b>.</li>
+    </ol>
+    <button id="start" type="button" class="primary">Start camera</button>
+    <p id="intro-error" role="alert" hidden></p>
+    <p class="small">Use it for practice, analysis or with people who know. Against an opponent who doesn’t know, it’s cheating.</p>
+    <p class="small"><a href="?demo">Try it on a demo board</a> (no camera needed)</p>
+  </div>
+</section>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
