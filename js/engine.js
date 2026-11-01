@@ -7,6 +7,14 @@ const SEARCH_SLACK_MS = 5000; // a search taking this much longer than asked mea
 // A tiny module using WebAssembly SIMD, which this Stockfish build needs (Safari has it from iOS 16.4).
 const SIMD_PROBE = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11]);
 
+/** The score in a Stockfish "info … score cp 34 …" line ({ cp } or { mate }, side to move), or null. */
+export function parseScore(line) {
+  if (!line.startsWith('info ') || line.startsWith('info string')) return null;
+  const match = / score (cp|mate) (-?\d+)/.exec(line);
+  if (!match) return null;
+  return match[1] === 'cp' ? { cp: Number(match[2]) } : { mate: Number(match[2]) };
+}
+
 /** Null if this browser can run the engine, otherwise why not, for the user. */
 export function engineProblem() {
   try {
@@ -58,15 +66,29 @@ export class Engine {
 
   /** The best move for `fen` as a UCI string (e.g. "e2e4"), or null when there is none. */
   async bestMove(fen, ms = 800) {
+    return (await this.analyse(fen, ms)).best;
+  }
+
+  /** Search `fen` for `ms` milliseconds: { best: UCI or null, score: { cp } / { mate } from the side to move, or null }. */
+  async analyse(fen, ms = 800) {
     await this.ready;
     this.worker.postMessage(`position fen ${fen}`);
     const hung = setTimeout(() => this.fail(new Error('Stockfish stopped responding')), ms + SEARCH_SLACK_MS);
+    let score = null;
     try {
-      const line = await this.send(`go movetime ${ms}`, (l) => l.startsWith('bestmove'));
+      const line = await this.send(`go movetime ${ms}`, (l) => {
+        score = parseScore(l) ?? score; // the last score before "bestmove" is the deepest
+        return l.startsWith('bestmove');
+      });
       const uci = line.split(/\s+/)[1];
-      return uci && uci !== '(none)' ? uci : null;
+      return { best: uci && uci !== '(none)' ? uci : null, score };
     } finally {
       clearTimeout(hung);
     }
+  }
+
+  /** Forget positions from an earlier game. */
+  newGame() {
+    if (!this.failed) this.worker.postMessage('ucinewgame');
   }
 }

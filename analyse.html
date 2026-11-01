@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Partie-Analyse</title>
+<style>
+  /* Layout: a study desk. Input on top; then the board with its arrows beside the evaluation curve and the move list. */
+  :root {
+    --bg: #f3f1ea;            /* scoresheet paper */
+    --surface: #fbfaf6;
+    --text: #1e231f;
+    --muted: #677068;
+    --line: #dcd8cb;
+    --accent: #2f8f55;        /* best move, buttons */
+    --accent-ink: #ffffff;
+    --sq-light: #e7e1cf;
+    --sq-dark: #7f9c69;
+    --blunder: #cf3f3f;
+    --mistake: #dd7f22;
+    --inaccuracy: #c9a227;
+    --played: #3b6fd1;        /* the move that was played */
+    --graph-white: #ffffff;
+    --graph-black: #2a2f2b;
+    --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121513; --surface: #1a1e1b; --text: #e9ede7; --muted: #9aa49b; --line: #2d332e;
+      --accent: #45c072; --accent-ink: #08210f; --sq-light: #c9c3ae; --sq-dark: #627d50;
+      --graph-white: #e9ede7; --graph-black: #0c0e0d;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 var(--ui); }
+  main {
+    max-width: 72rem; margin: 0 auto;
+    padding: calc(env(safe-area-inset-top, 0px) + 20px) max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 32px) max(16px, env(safe-area-inset-left, 0px));
+    display: grid; gap: 20px;
+  }
+  [hidden] { display: none !important; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+  h1 { margin: 0; font-size: 28px; letter-spacing: -0.01em; }
+  a { color: var(--accent); }
+  .muted { color: var(--muted); }
+  .small { font-size: 14px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+  label { font-weight: 600; font-size: 14px; }
+  textarea {
+    width: 100%; min-height: 9rem; resize: vertical;
+    padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); font: 14px/1.4 ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+  .field { display: grid; gap: 4px; }
+  select, button {
+    min-height: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--surface); color: var(--text); font: 600 15px var(--ui); touch-action: manipulation;
+  }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  #error { margin: 0; color: var(--blunder); font-weight: 600; }
+
+  progress { width: 100%; height: 10px; accent-color: var(--accent); }
+
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 12px; }
+  .side { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; align-items: baseline; }
+  .side h2 { grid-column: 1 / -1; margin: 0 0 6px; font-size: 17px; display: flex; gap: 8px; align-items: center; }
+  .side h2 .dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--muted); }
+  .side .big { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .counts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 13px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  .chip.blunder { color: var(--blunder); } .chip.mistake { color: var(--mistake); } .chip.inaccuracy { color: var(--inaccuracy); }
+
+  .study { display: grid; grid-template-columns: minmax(0, 30rem) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 760px) { .study { grid-template-columns: minmax(0, 1fr); } }
+  .board-wrap { display: grid; grid-template-columns: 14px 1fr; gap: 8px; }
+  #evalbar { border-radius: 4px; overflow: hidden; background: var(--graph-black); display: flex; flex-direction: column-reverse; border: 1px solid var(--line); }
+  #evalbar div { background: var(--graph-white); transition: height 0.25s; }
+  #board { width: 100%; aspect-ratio: 1; display: block; border-radius: 6px; max-width: 100%; touch-action: manipulation; }
+  .nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  #comment { margin: 0; min-height: 3em; font-size: 16px; }
+  #comment .san { font-weight: 700; }
+  #comment .tag { font-weight: 700; }
+  .tag.blunder { color: var(--blunder); } .tag.mistake { color: var(--mistake); } .tag.inaccuracy { color: var(--inaccuracy); } .tag.best { color: var(--accent); }
+
+  #graph { width: 100%; height: 120px; display: block; cursor: pointer; border-radius: 8px; }
+  .moves { display: grid; grid-template-columns: 2.6em 1fr 1fr; gap: 2px 6px; max-height: 26rem; overflow-y: auto; font-variant-numeric: tabular-nums; }
+  .moves .no { color: var(--muted); text-align: right; padding: 6px 0; }
+  .moves button {
+    min-height: 34px; text-align: left; font-weight: 500; border: 1px solid transparent; background: transparent; padding: 0 8px;
+  }
+  .moves button.current { background: var(--bg); border-color: var(--line); font-weight: 700; }
+  .moves .sym { font-weight: 700; margin-left: 4px; }
+  .sym.blunder { color: var(--blunder); } .sym.mistake { color: var(--mistake); } .sym.inaccuracy { color: var(--inaccuracy); }
+  @media (prefers-reduced-motion: reduce) { #evalbar div { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Partie-Analyse</h1>
+    <a class="small" href="./">Zur Kamera-Hilfe</a>
+  </header>
+
+  <section class="panel" id="input-panel">
+    <label for="pgn">Partie (PGN)</label>
+    <textarea id="pgn" spellcheck="false" placeholder="1. e4 e5 2. Nf3 …"></textarea>
+    <p class="small muted" style="margin:0">Bei chess.com nach der Partie: <b>Teilen</b> → <b>PGN</b> → <b>Kopieren</b>, dann hier einfügen. <button id="example" type="button" style="min-height:0;padding:2px 8px;font-size:13px">Beispielpartie laden</button></p>
+    <div class="row">
+      <div class="field">
+        <label for="depth">Gründlichkeit</label>
+        <select id="depth">
+          <option value="300">Schnell (0,3 s pro Zug)</option>
+          <option value="1000" selected>Normal (1 s pro Zug)</option>
+          <option value="3000">Gründlich (3 s pro Zug)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="side">Ich hatte</label>
+        <select id="side">
+          <option value="w">Weiß</option>
+          <option value="b">Schwarz</option>
+        </select>
+      </div>
+      <button id="analyse" type="button" class="primary">Analysieren</button>
+    </div>
+    <p id="error" role="alert" hidden></p>
+  </section>
+
+  <section class="panel" id="progress-panel" hidden>
+    <p id="progress-text" style="margin:0">Stockfish lädt …</p>
+    <progress id="progress" max="1" value="0"></progress>
+    <div><button id="cancel" type="button">Abbrechen</button></div>
+  </section>
+
+  <section id="results" hidden>
+    <div style="display:grid;gap:20px">
+      <div class="summary" id="summary"></div>
+      <div class="study">
+        <div class="panel">
+          <div class="board-wrap">
+            <div id="evalbar" aria-hidden="true"><div></div></div>
+            <svg id="board" viewBox="0 0 8 8" role="img" aria-label="Brett"></svg>
+          </div>
+          <div class="nav">
+            <button id="first" type="button" aria-label="Anfang">⏮</button>
+            <button id="prev" type="button" aria-label="Zurück">◀</button>
+            <button id="next" type="button" aria-label="Weiter">▶</button>
+            <button id="last" type="button" aria-label="Ende">⏭</button>
+          </div>
+          <p id="comment" aria-live="polite"></p>
+          <button id="next-mistake" type="button">Mein nächster Fehler</button>
+        </div>
+        <div class="panel">
+          <svg id="graph" viewBox="0 0 100 40" preserveAspectRatio="none" aria-label="Bewertungsverlauf"></svg>
+          <div class="moves" id="moves"></div>
+          <p class="small muted" style="margin:0">Blau: gespielter Zug · Grün: Stockfishs besserer Zug. Pfeiltasten blättern.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+<script type="module" src="js/analyse-app.js"></script>
+</body>
+</html>
