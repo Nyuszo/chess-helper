@@ -71,7 +71,7 @@ async function analyse() {
   const fens = [plies[0].fenBefore, ...plies.map((p) => p.fenAfter)];
   els.progress.max = fens.length;
   els.progress.value = 0;
-  els['progress-text'].textContent = 'Stockfish lädt …';
+  els['progress-text'].textContent = state.engine ? 'Stockfish startet …' : 'Stockfish lädt … (beim ersten Mal bis zu 30 s)';
 
   try {
     state.engine ??= new Engine();
